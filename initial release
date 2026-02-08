@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# --- Check Root Access ---
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "\e[1;31m❌ Error: Lotfan in script ro ba dastresi e ROOT (sudo) ejra konid!\e[0m"
+    exit 1
+fi
+
+# --- Function: Show Menu ---
+show_menu() {
+    echo -e "\n\e[1;34m====================================\e[0m"
+    echo -e "\e[1;35m    MrCoc Turbo & Optimizer Menu    \e[0m"
+    echo -e "\e[1;34m====================================\e[0m"
+    echo -e "\e[1;32m1) Auto Optimize (Pishnahade MrCoc)\e[0m"
+    echo -e "2) Custom Tuning (Tanzimate Dasti)"
+    echo -e "3) Check BBR & Network Status"
+    echo -e "\e[1;31m4) RESET TO DEFAULT (Bazgasht be Aval)\e[0m"
+    echo -e "5) Khorooj (Exit)"
+    echo -e "\e[1;34m------------------------------------\e[0m"
+    read -p "Lotfan yek gozine entekhab konid [1-5]: " choice
+}
+
+# --- Function: Auto Optimize ---
+auto_optimize() {
+    echo -e "\n\e[1;33m🚀 Dar hal e a'male tanzimate TURBO... Sabr konid.\e[0m"
+    
+    # Sakhte file tanzimat dar directory sysctl
+    cat <<EOF > /etc/sysctl.d/99-mrcoc-turbo.conf
+# Network Core Tuning
+net.core.somaxconn = 65535
+net.core.netdev_max_backlog = 5000
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+
+# TCP Stack Tuning
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_max_tw_buckets = 2000000
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_fastopen = 3
+
+# BBR Activation
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+
+    # Apply changes
+    sysctl --system > /dev/null 2>&1
+    echo -e "\e[1;32m✅ Mode TURBO ba movafaghiat faal shod!\e[0m"
+    echo -e "\e[1;36m💡 Pishnahad mishe baraye natije behtar, server ro REBOOT konid.\e[0m"
+}
+
+# --- Function: Custom Tuning ---
+custom_tuning() {
+    echo -e "\n\e[1;36m--- Tanzimate Dasti (Manual Tuning) ---\e[0m"
+    read -p "Meghdare Max Connections (Pishnahad 65535): " user_conn
+    user_conn=${user_conn:-65535}
+    
+    read -p "Meghdare TCP Memory (Pishnahad 16777216): " user_mem
+    user_mem=${user_mem:-16777216}
+
+    cat <<EOF > /etc/sysctl.d/99-mrcoc-turbo.conf
+net.core.somaxconn = $user_conn
+net.core.rmem_max = $user_mem
+net.core.wmem_max = $user_mem
+net.ipv4.tcp_rmem = 4096 87380 $user_mem
+net.ipv4.tcp_wmem = 4096 65536 $user_mem
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+    sysctl --system > /dev/null 2>&1
+    echo -e "\e[1;32m✅ Tanzimate dasti ba movafaghiat zakhire shod.\e[0m"
+}
+
+# --- Function: Check Status ---
+check_status() {
+    echo -e "\n\e[1;34m--- Status e Feli e System ---\e[0m"
+    current_bbr=$(sysctl net.ipv4.tcp_congestion_control | awk '{print $3}')
+    max_conn=$(sysctl net.core.somaxconn | awk '{print $3}')
+    
+    if [ "$current_bbr" == "bbr" ]; then
+        echo -e "BBR Status: \e[1;32m روشن (Active) \e[0m"
+    else
+        echo -e "BBR Status: \e[1;31m خاموش (Inactive) \e[0m"
+    fi
+    echo -e "Max Connections: \e[1;36m $max_conn \e[0m"
+}
+
+# --- Function: Reset to Default ---
+reset_system() {
+    echo -e "\n\e[1;33m🔄 Dar hal e bazgardani be halate avalieh...\e[0m"
+    if [ -f "/etc/sysctl.d/99-mrcoc-turbo.conf" ]; then
+        rm "/etc/sysctl.d/99-mrcoc-turbo.conf"
+        sysctl --system > /dev/null 2>&1
+        
+        # Force set cubic as default
+        echo "net.ipv4.tcp_congestion_control=cubic" > /tmp/mrcoc_reset.conf
+        sysctl -p /tmp/mrcoc_reset.conf > /dev/null 2>&1
+        rm /tmp/mrcoc_reset.conf
+        
+        echo -e "\e[1;32m✅ System be halate standard bargasht.\e[0m"
+    else
+        echo -e "\e[1;31m❌ Hich tanzimati baraye reset kardan peyda nashod.\e[0m"
+    fi
+}
+
+# --- Main Execution Loop ---
+while true; do
+    show_menu
+    case $choice in
+        1) auto_optimize ;;
+        2) custom_tuning ;;
+        3) check_status ;;
+        4) reset_system ;;
+        5) echo -e "\e[1;33mKhoda-fez MrCoc! 👋\e[0m"; exit 0 ;;
+        *) echo -e "\e[1;31mGozine Eshtebah! Lotfan 1 ta 5 ro entekhab konid.\e[0m" ;;
+    esac
+done
